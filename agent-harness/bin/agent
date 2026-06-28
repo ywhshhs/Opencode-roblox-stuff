@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#
+# agent — launcher for the Agent Harness.
+# Calls node bin/agent.mjs which runs the harness via tsx.
+#
+# ~/.local/bin/agent → bin/agent (this file) → bin/agent.mjs (the node wrapper)
+#
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HARNESS_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Run the node wrapper — it handles everything
+exec node "$HARNESS_DIR/bin/agent.mjs" "$@"
