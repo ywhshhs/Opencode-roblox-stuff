@@ -1,0 +1,38 @@
+{
+  "model": {
+    "vocab_size": 8192,
+    "d_model": 288,
+    "n_heads": 8,
+    "n_layers": 6,
+    "d_ff": 1024,
+    "max_seq_len": 512,
+    "dropout": 0.1,
+    "bias": false
+  },
+  "train": {
+    "datasets": [
+      "Crownelius/Complete-FABLE.5-traces-2M",
+      "DavidrPatton/Fable-5-GLM-5.2-Traces"
+    ],
+    "max_samples_per_dataset": 500000,
+    "total_max_samples": 800000,
+    "val_split": 0.05,
+    "batch_size": 32,
+    "learning_rate": 0.0003,
+    "weight_decay": 0.1,
+    "warmup_steps": 1000,
+    "max_steps": 50000,
+    "grad_clip": 1.0,
+    "save_every": 5000,
+    "eval_every": 1000,
+    "log_every": 100,
+    "output_dir": "checkpoints",
+    "model_name": "fable-10m",
+    "device": "auto",
+    "num_workers": 0,
+    "pin_memory": true,
+    "mixed_precision": true
+  },
+  "vocab_size": 8192,
+  "n_params": 9662112
+}
