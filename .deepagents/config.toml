@@ -2,4 +2,4 @@
 recent = "agent"
 
 [models]
-recent = "baseten:nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B"
+recent = "baseten:moonshotai/Kimi-K2.7-Code"
