@@ -23,9 +23,8 @@ import {
   renderThinking, 
   renderToolCall, 
   renderToolResult, 
-  renderOutput, 
-  renderSuggestion, 
-  renderDone 
+  renderOutput,
+  renderDone
 } from "../cli/render.js";
 import type { AgentConfig } from "../types/index.js";
 
@@ -55,7 +54,7 @@ export async function runReActStep(
   // Call the provider
   const response = await provider.complete(messages, toolDefs);
 
-  // Show thinking
+  // Show thinking (only in verbose mode)
   if (response.reasoning && config.verbose) {
     console.log(renderThinking(response.reasoning));
   }
@@ -63,7 +62,7 @@ export async function runReActStep(
   // Execute tool calls
   const toolResults: string[] = [];
   for (const tc of response.toolCalls) {
-    console.log(renderToolCall(tc));
+    console.log(renderToolCall(tc.name, JSON.stringify(tc.arguments)));
 
     const tool = tools.find((t) => t.name === tc.name);
     if (!tool) {
@@ -125,8 +124,6 @@ export async function runAgent(config: AgentConfig, prompt: string): Promise<voi
     { role: "user", content: prompt },
   ];
 
-  console.log(renderThinking(`Agent: ${providerConfig.name} / ${providerConfig.model}`));
-
   let iterations = 0;
   while (iterations < (maxIterations ?? 25)) {
     const step = await runReActStep(provider, messages, tools, config);
@@ -135,15 +132,7 @@ export async function runAgent(config: AgentConfig, prompt: string): Promise<voi
     iterations++;
   }
 
-  console.log(renderSuggestion(
-    "Task complete. The agent used available tools to:\n" +
-    "- Read files, write files, run commands\n" +
-    "- Search the web for verification\n" +
-    "- Look up existing code patterns\n" +
-    "\nConsider:\n" +
-    "  • Adding error handling for edge cases\n" +
-    "  • Writing tests for the work done\n" +
-    "  • Checking if the architecture needs review"
-  ));
-  console.log(renderDone());
+  if (verbose) {
+    console.log(renderDone());
+  }
 }

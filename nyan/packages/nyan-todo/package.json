@@ -1,0 +1,19 @@
+{
+  "name": "@nyan-works/nyan-todo",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@nyan-works/nyan-memory": "workspace:*",
+    "chalk": "^5.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "tsx": "^4.21.0",
+    "vitest": "^3.1.2"
+  }
+}

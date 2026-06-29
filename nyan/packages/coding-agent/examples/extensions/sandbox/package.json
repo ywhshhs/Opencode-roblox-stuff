@@ -1,0 +1,19 @@
+{
+	"name": "nyan-extension-sandbox",
+	"private": true,
+	"version": "1.10.2",
+	"type": "module",
+	"scripts": {
+		"clean": "echo 'nothing to clean'",
+		"build": "echo 'nothing to build'",
+		"check": "echo 'nothing to check'"
+	},
+	"nyan": {
+		"extensions": [
+			"./index.ts"
+		]
+	},
+	"dependencies": {
+		"@anthropic-ai/sandbox-runtime": "0.0.26"
+	}
+}

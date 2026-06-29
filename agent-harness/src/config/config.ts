@@ -20,6 +20,8 @@ export interface HarnessConfig {
   showThinking: boolean;
   /** Custom system prompt path */
   systemPrompt?: string;
+  /** Saved API key */
+  apiKey?: string;
 }
 
 const DEFAULT_CONFIG: HarnessConfig = {
@@ -31,6 +33,7 @@ const DEFAULT_CONFIG: HarnessConfig = {
   },
   maxIterations: 25,
   showThinking: true,
+  apiKey: process.env.AGENT_API_KEY,
 };
 
 /**

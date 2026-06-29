@@ -14,15 +14,17 @@
  */
 
 import { z } from "zod";
-import { type AgentTool } from "../harness/loop.js";
-
 // AgentTool type — the tool interface
 // name: tool name (matches what the provider calls)
 // description: when to use it
 // parameters: JSON Schema shape
 // execute: the actual implementation
-export type { AgentTool };
-
+export interface AgentTool {
+  name: string;
+  description: string;
+  parameters?: Record<string, unknown>;
+  execute: (args: Record<string, unknown>) => Promise<string>;
+}
 /**
  * Create the tool definitions (what the provider sees) and 
  * the tool implementations (what actually runs).

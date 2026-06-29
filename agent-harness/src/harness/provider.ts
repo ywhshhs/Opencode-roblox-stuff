@@ -67,7 +67,7 @@ export class OpenAIProvider implements Provider {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (this.apiKey) headers["Authorization"] = `Bearer ${this.apiKey}`;
 
-    const response = await fetch(`${this.baseUrl}/v1/chat/completions`, {
+    const response = await fetch(`${this.baseUrl}/chat/completions`, {
       method: "POST",
       headers,
       body: JSON.stringify(body),

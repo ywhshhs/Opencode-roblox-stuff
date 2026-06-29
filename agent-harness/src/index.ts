@@ -34,6 +34,11 @@ async function main() {
     .scriptName("agent-harness")
     .usage("$0 [options] <prompt>")
     .command(["$0", "$0 *"], "Run the agent with a prompt")
+    .alias("m", "model")
+    .alias("k", "api-key")
+    .alias("u", "base-url")
+    .alias("p", "provider")
+    .alias("v", "verbose")
     .option("provider", {
       type: "string",
       describe: "Provider to use: openai | anthropic | opencode-zen",
@@ -46,13 +51,18 @@ async function main() {
     })
     .option("base-url", {
       type: "string",
-      describe: "API base URL",
-      default: "https://opencode.ai/zen/v1",
+      describe: "API base URL (e.g., https://opencode.ai/zen for OpenAI-compatible)",
+      default: "https://opencode.ai/zen",
     })
     .option("api-key", {
       type: "string",
-      describe: "API key (or set AGENT_API_KEY env var)",
-      default: process.env.AGENT_API_KEY,
+      describe: "API key — saves to ~/.config/agent-harness/config.json",
+      default: process.env.AGENT_API_KEY ?? loadConfig().apiKey,
+    })
+    .option("save", {
+      type: "boolean",
+      describe: "Save the --api-key to persistent config",
+      default: false,
     })
     .option("prompt", {
       alias: "P",
@@ -105,8 +115,12 @@ async function main() {
   if (argv.set) {
     const [key, value] = argv.set.split("=");
     const config = loadConfig();
-    if (key === "provider" || key === "model") {
+    if (key === "provider" || key === "model" || key === "base-url") {
       (config.provider as Record<string, unknown>)[key] = value;
+    }
+    if (key === "apikey") {
+      config.apiKey = value;
+      config.provider.apiKey = value;
     }
     if (key === "maxIterations") {
       config.maxIterations = Number(value);
@@ -118,27 +132,38 @@ async function main() {
 
   // Get the prompt — first non-flag positional
   const promptText = String((argv as any)._?.[0] ?? "").trim();
+
+  // If no prompt but we have an api-key or other flags, show a message
   if (!promptText) {
-    console.error("Error: No prompt provided. Use: agent-harness \"your task\"");
-    process.exit(1);
+    const config = loadConfig();
+    console.log("Config:");
+    console.log("  " + formatConfig(config));
+    console.log("  Use: agent \"your prompt\" to run the agent");
+    process.exit(0);
   }
 
   // Build config
+  const savedConfig = loadConfig();
   const config: AgentConfig = {
     provider: {
-      name: String(argv.provider ?? "opencode-zen"),
-      baseUrl: String(argv["base-url"] ?? "https://opencode.ai/zen/v1"),
-      model: String(argv.model ?? "gpt-5.5"),
-      type: (String(argv.provider ?? "opencode-zen") === "anthropic" ? "anthropic" : "openai") as "openai" | "anthropic",
-      apiKey: String(argv["api-key"] ?? ""),
+      name: String(argv.provider ?? savedConfig.provider.name),
+      baseUrl: String(argv["base-url"] ?? savedConfig.provider.baseUrl),
+      model: String(argv.model ?? savedConfig.provider.model),
+      type: (String(argv.provider ?? savedConfig.provider.name) === "anthropic" ? "anthropic" : "openai") as "openai" | "anthropic",
+      apiKey: String(argv["api-key"] ?? savedConfig.apiKey ?? ""),
     },
-    maxIterations: 25,
+    maxIterations: savedConfig.maxIterations ?? 25,
     verbose: argv.verbose ?? false,
     systemPrompt: argv.prompt ? undefined : buildDefaultSystemPrompt(),
   };
 
-  // Show header
-  renderHeader(`Agent Harness — ${config.provider.name} / ${config.provider.model}`);
+  // If an API key was passed on CLI, save it to persistent config
+  if (argv["api-key"]) {
+    const saved = loadConfig();
+    saved.apiKey = String(argv["api-key"]);
+    saved.provider.apiKey = String(argv["api-key"]);
+    saveConfig(saved);
+  }
 
   // Run the agent
   await runAgent(config, promptText);

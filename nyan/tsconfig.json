@@ -1,0 +1,35 @@
+{
+	"extends": "./tsconfig.base.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"paths": {
+			"*": ["./*"],
+			"@nyan-works/nyan-ai": ["./packages/ai/src/index.ts"],
+			"@nyan-works/nyan-ai/oauth": ["./packages/ai/src/oauth.ts"],
+			"@nyan-works/nyan-ai/*": ["./packages/ai/src/*.ts", "./packages/ai/src/providers/*.ts"],
+			"@nyan-works/nyan-ai/dist/*": ["./packages/ai/src/*"],
+			"@nyan-works/nyan-agent-core": ["./packages/agent/src/index.ts"],
+			"@nyan-works/nyan-agent-core/*": ["./packages/agent/src/*"],
+			"@nyan-works/nyan-coding-agent": ["./packages/coding-agent/src/index.ts"],
+			"@nyan-works/nyan-coding-agent/hooks": ["./packages/coding-agent/src/core/hooks/index.ts"],
+			"@nyan-works/nyan-coding-agent/*": ["./packages/coding-agent/src/*"],
+			"@nyan-works/nyan-orchestrator": ["./packages/orchestrator/src/index.ts"],
+			"@nyan-works/nyan-orchestrator/*": ["./packages/orchestrator/src/*"],
+			"typebox": ["./node_modules/typebox"],
+			"@nyan-works/nyan-tui": ["./packages/tui/src/index.ts"],
+			"@nyan-works/nyan-tui/*": ["./packages/tui/src/*"],
+			"@nyan-works/nyan-memory": ["./packages/nyan-memory/src/index.ts"],
+			"@nyan-works/nyan-memory/*": ["./packages/nyan-memory/src/*"],
+			"@nyan-works/nyan-goal": ["./packages/nyan-goal/src/index.ts"],
+			"@nyan-works/nyan-goal/*": ["./packages/nyan-goal/src/*"],
+			"@nyan-works/nyan-todo": ["./packages/nyan-todo/src/index.ts"],
+			"@nyan-works/nyan-todo/*": ["./packages/nyan-todo/src/*"],
+			"@nyan-works/nyan-tools": ["./packages/nyan-tools/src/index.ts"],
+			"@nyan-works/nyan-tools/*": ["./packages/nyan-tools/src/*"],
+			"@nyan-works/nyan-agent-old": ["./packages/agent-old/src/index.ts"],
+			"@nyan-works/nyan-agent-old/*": ["./packages/agent-old/src/*"]
+		}
+	},
+	"include": ["packages/*/src/**/*", "packages/*/test/**/*", "packages/coding-agent/examples/**/*"],
+	"exclude": ["**/dist/**", "packages/coding-agent/examples/extensions/gondolin/**"]
+}
