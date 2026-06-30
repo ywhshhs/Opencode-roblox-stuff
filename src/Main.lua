@@ -1,7 +1,19 @@
 --[[
-	OpenCode Zen Assistant - Roblox Client-Sided GUI
-	API: https://opencode.ai/zen/v1
+	OpenCode Zen Assistant — Roblox Client-Sided GUI
+	API: https://opencode.ai/zen/v1/responses
 	Model: mimo-v2.5-free
+
+	Features:
+	- Chat bar + scrollable output window
+	- OpenCode Zen API integration (mimo-v2.5-free)
+	- Console checker (/check)
+	- Script runner (/run <luau>)
+	- Auto-execute from [[EXECUTE:...]] in responses
+	- F2 toggle, draggable, fully client-sided
+	- API key popup on first load
+
+	You need an OpenCode Zen API key.
+	Get one at: https://opencode.ai/auth
 ]]
 
 -- Services
@@ -12,11 +24,17 @@ local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 
 -- Constants
-local API_URL = "https://opencode.ai/zen/v1"
+local API_URL = "https://opencode.ai/zen/v1/responses"
 local MODEL = "mimo-v2.5-free"
 local LOCAL_PLAYER = Players.LocalPlayer
 
--- ScreenGui (we use CoreGui so it stays on top even in studio)
+-- Global state (shared across sessions via _G)
+local ZEN_API_KEY = _G.ZEN_STORED_KEY or ""
+
+--============================================================================
+-- BUILD MAIN GUI
+--============================================================================
+
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "OpenCodeZenAssistant"
 screenGui.ResetOnSpawn = false
@@ -43,7 +61,6 @@ mainFrame.Active = true
 mainFrame.Draggable = true
 mainFrame.Parent = screenGui
 
--- Add rounded corners via UIStroke (Luau compatible)
 local mainCorner = Instance.new("UICorner")
 mainCorner.CornerRadius = UDim.new(0, 8)
 mainCorner.Parent = mainFrame
@@ -247,13 +264,15 @@ helpCorner.CornerRadius = UDim.new(0, 4)
 helpCorner.Parent = helpBtn
 helpBtn.Parent = actionRow
 
---=== Internal State ===--
-local requestQueue = {}
-local isProcessing = false
-local currentConsoleData = ""
-local currentScriptBuffer = ""
+--============================================================================
+-- INTERNAL STATE
+--============================================================================
 
---=== Helper Functions ===--
+local currentConsoleData = ""
+
+--============================================================================
+-- HELPERS
+--============================================================================
 
 local function log(message, msgType)
 	msgType = msgType or "info"
@@ -271,19 +290,19 @@ local function log(message, msgType)
 		system = "[SYS]",
 		code = "[CODE]"
 	}
-	
+
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.new(1, 0, 0, 20)
 	label.BackgroundTransparency = 1
-	label.Text = prefix[msgType] or "[?]" .. " " .. message
+	-- Fixed: (prefix[msgType] or "[?]") .. " " .. message — message now always shows
+	local tag = (prefix[msgType] or "[?]")
+	label.Text = tag .. " " .. message
 	label.TextColor3 = color[msgType] or Color3.fromRGB(200, 200, 200)
 	label.Font = Enum.Font.Gotham
 	label.TextSize = 13
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.RichText = true
 	label.Parent = outputScrolling
-	
-	outputScrolling.CanvasPosition = outputScrolling.AbsoluteCanvasSize.Y
 	outputScrolling.CanvasSize = UDim2.fromScale(0, 0)
 end
 
@@ -300,7 +319,7 @@ local function addCodeBlock(code)
 	frameCorner.CornerRadius = UDim.new(0, 4)
 	frameCorner.Parent = frame
 	frame.Parent = outputScrolling
-	
+
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.new(1, -10, 1, 0)
 	label.Position = UDim2.new(0, 5, 0, 0)
@@ -311,7 +330,6 @@ local function addCodeBlock(code)
 	label.TextSize = 12
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.Parent = frame
-	
 	return frame
 end
 
@@ -323,41 +341,85 @@ local function addSeparator()
 	sep.Parent = outputScrolling
 end
 
---=== API Call ===--
+--============================================================================
+-- API CALL
+--============================================================================
+
+--[[
+	OpenCode Zen uses /v1/responses (OpenAI responses API), not /v1/chat/completions.
+	The responses API returns {"response": {"output": ...}} — not {"choices": [...]}.
+
+	If the response format is different, this function parses multiple possible shapes:
+	  - responses API: data.response.output[].text
+	  - chat completions: data.choices[1].message.content
+	  - Anthropic: data.message.content
+	  - direct: data.content
+]]
 
 local function sendToZenAPI(message, callback)
+	if ZEN_API_KEY == "" then
+		log("No API key set — cannot send to API", "error")
+		setStatus("No API key — set one via the popup or _G.ZEN_STORED_KEY")
+		if callback then callback(nil, "no key") end
+		return
+	end
+
 	setStatus("Sending to API...")
-	
+
 	local headers = {
-		["Content-Type"] = "application/json"
+		["Content-Type"] = "application/json",
+		["Authorization"] = "Bearer " .. ZEN_API_KEY
 	}
-	
+
 	local body = {
 		model = MODEL,
-		messages = {
-			{
-				role = "user",
-				content = message
-			}
-		},
+		input = message,
 		max_tokens = 2048,
 		temperature = 0.7
 	}
-	
+
 	local jsonBody = HttpService:JSONEncode(body)
-	
+
 	local success, response = pcall(function()
 		return HttpService:PostAsync(API_URL, jsonBody, Enum.HttpContentType.ApplicationJson, false, headers)
 	end)
-	
+
 	if success then
 		local data = HttpService:JSONDecode(response)
-		local reply = data.choices and data.choices[1] and data.choices[1].message and data.choices[1].message.content or "No response"
-		
+		local reply = ""
+
+		-- Try multiple response shapes
+		if data.response and data.response.output then
+			-- responses API — output is an array of content blocks
+			if type(data.response.output) == "table" then
+				for _, block in ipairs(data.response.output) do
+					if block.type == "text" and type(block.text) == "string" then
+						reply = reply .. block.text
+						break
+					end
+				end
+			end
+		elseif data.choices and #data.choices > 0 then
+			-- Fallback: chat completions style
+			reply = data.choices[1].message and data.choices[1].message.content or ""
+		elseif data.message then
+			-- Anthropic-style single message
+			reply = data.message.content or ""
+		elseif data.content then
+			-- Direct content
+			reply = tostring(data.content)
+		else
+			reply = "[No response format recognized — raw: " .. tostring(response):sub(1, 200) .. "]"
+		end
+
+		if reply == "" then
+			reply = "[No response]"
+		end
+
 		log(reply, "info")
 		addSeparator()
-		
-		-- Check if the response contains code to execute
+
+		-- [[EXECUTE:...]] — runs code from the model response
 		if reply:match("%[%[EXECUTE:(.-)%]%]") then
 			local codeToRun = reply:match("%[%[EXECUTE:(.-)%]%]")
 			log("Executing script from response...", "system")
@@ -371,42 +433,46 @@ local function sendToZenAPI(message, callback)
 				log("Script execution failed: " .. execResult, "error")
 			end
 		end
-		
-		setStatus("Ready | Model: mimo-v2.5-free")
+
+		setStatus("Ready | Model: " .. MODEL)
 		if callback then
 			callback(reply)
 		end
 	else
 		log("API request failed: " .. tostring(response), "error")
-		setStatus("Error - check connection")
+		setStatus("Error — check connection and API key")
 		if callback then
 			callback(nil, response)
 		end
 	end
 end
 
---=== Chat/Input Handling ===--
+--============================================================================
+-- CHAT / INPUT HANDLING
+--============================================================================
+
+-- Forward-declare because handleInput calls checkConsole before its definition
+local checkConsole
 
 local function handleInput(text)
 	if text == "" then return end
-	
+
 	log("You: " .. text, "info")
-	
-	-- Check for commands
+
 	local cmd = text:lower()
-	
+
 	if cmd == "/help" then
 		log("Available commands:", "system")
-		log("/help - Show this help", "info")
-		log("/check - Check Roblox console", "info")
-		log("/console - Fetch full console output", "info")
-		log("/run <code> - Execute Lua code", "info")
-		log("/clear - Clear the output window", "info")
-		log("/reconnect - Re-test API connection", "info")
-		log("Any other text will be sent to the OpenAI API", "info")
+		log("/help — Show this help", "info")
+		log("/check — Check Roblox console", "info")
+		log("/console — Fetch full console output", "info")
+		log("/run <code> — Execute Lua code", "info")
+		log("/clear — Clear the output window", "info")
+		log("/reconnect — Re-test API connection", "info")
+		log("Any other text will be sent to the API", "info")
 		return
 	end
-	
+
 	if cmd == "/clear" then
 		for _, child in pairs(outputScrolling:GetChildren()) do
 			if child:IsA("TextLabel") or child:IsA("Frame") then
@@ -416,22 +482,21 @@ local function handleInput(text)
 		log("Output cleared", "system")
 		return
 	end
-	
+
 	if cmd == "/check" or cmd == "/console" then
 		checkConsole()
 		return
 	end
-	
+
 	if cmd:match("^/run ") then
 		local code = text:sub(6)
-		currentScriptBuffer = code
 		log("Running script...", "system")
 		addCodeBlock(code)
-		
+
 		local success, result = pcall(function()
 			return loadstring(code)()
 		end)
-		
+
 		if success then
 			log("Script executed successfully", "success")
 			if result ~= nil then
@@ -442,34 +507,25 @@ local function handleInput(text)
 		end
 		return
 	end
-	
+
 	-- Default: send to API
 	sendToZenAPI(text)
 end
 
---=== Console Checking ===--
+--============================================================================
+-- CONSOLE CHECKING
+--============================================================================
 
---=== Console Checking ===--
--- This is an exposed tool so any agent/script can call it
-local function checkConsole()
+checkConsole = function()
 	log("Fetching Roblox console output...", "system")
-	
-	-- Method: grab recent warnings/errors from the client
-	-- We look at _G for anything the client has registered
-	local collected = {}
-	
-	-- Collect warnings from the debug library if available
+
 	local warnCount = 0
-	local errCount = 0
-	
-	-- Scan through the game's scripts for any uncaught errors
 	for _, script in pairs(game:GetDescendants()) do
 		if script:IsA("LuaSourceContainer") or script:IsA("ModuleScript") then
-			-- just noting they exist
 			warnCount = warnCount + 1
 		end
 	end
-	
+
 	local consoleData = string.format(
 		"Scripts found: %d\n" ..
 		"Memory: %.2f MB\n" ..
@@ -480,35 +536,38 @@ local function checkConsole()
 		math.floor(1 / (task.wait() or 0.016) + 0.5),
 		(gethui and "connected" or "unknown")
 	)
-	
+
 	currentConsoleData = consoleData
-	
+
 	log("Console snapshot taken", "system")
 	log(consoleData, "info")
-	
-	-- Return the data for any external caller
+
 	return consoleData
 end
 
---=== Connection Test ===--
+--============================================================================
+-- CONNECTION TEST
+--============================================================================
 
 local function testConnection()
-	log("Testing connection to " .. API_URL .. "...", "system")
-	
+	log("Testing connection to " .. API_URL .. " with model " .. MODEL .. "...", "system")
+
 	local success, response = pcall(function()
-		return HttpService:PostAsync(API_URL, '{"model":"'..MODEL..'","messages":[{"role":"user","content":"Hello"}],"max_tokens":10}', Enum.HttpContentType.ApplicationJson, false)
+		return HttpService:PostAsync(API_URL, '{"model":"'..MODEL..'","input":"Hello","max_tokens":10}', Enum.HttpContentType.ApplicationJson, false)
 	end)
-	
+
 	if success then
 		log("Connection successful!", "success")
-		setStatus("Connected | Model: mimo-v2.5-free")
+		setStatus("Connected | Model: " .. MODEL)
 	else
 		log("Connection failed: " .. tostring(response), "error")
-		setStatus("Disconnected - check URL or network")
+		setStatus("Disconnected — check URL or network")
 	end
 end
 
---=== Event Wiring ===--
+--============================================================================
+-- EVENT WIRING
+--============================================================================
 
 -- Send button
 sendBtn.MouseButton1Click:Connect(function()
@@ -545,7 +604,7 @@ consoleCheckBtn.MouseButton1Click:Connect(function()
 	checkConsole()
 end)
 
--- Run script button - opens a small dialog to paste script
+-- Run script button
 runScriptBtn.MouseButton1Click:Connect(function()
 	log("Paste your Luau code below and press Enter", "system")
 	chatBar.PlaceholderText = "Paste your script here..."
@@ -563,12 +622,13 @@ task.spawn(function()
 	testConnection()
 end)
 
---=== Extra Features ===--
+--============================================================================
+-- KEYBOARD SHORTCUTS
+--============================================================================
 
--- Keyboard shortcuts
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then return end
-	
+
 	if input.KeyCode == Enum.KeyCode.F2 then
 		screenGui.Enabled = not screenGui.Enabled
 		mainFrame.Visible = true
@@ -576,36 +636,165 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	end
 end)
 
--- Hook into chat for /analyze console data
-local originalHandleInput = handleInput
-handleInput = function(text)
-	if text:match("^/analyze") then
-		log("Sending console data to AI for analysis...", "system")
-		sendToZenAPI("Analyze this Roblox console output: " .. currentConsoleData .. "\n\nProvide insights on any issues found.")
-		return
-	end
-	
-	originalHandleInput(text)
+--============================================================================
+-- API KEY POPUP + INIT
+--============================================================================
+
+--[[
+	If no key is set, show a small dialog overlay asking for one.
+	The popup sits on top of the already-built GUI, so the rest of the
+	script (tool surface, etc.) is fully functional even without a key.
+]]
+if ZEN_API_KEY == "" then
+	-- Create an overlay
+	local overlay = Instance.new("Frame")
+	overlay.Name = "ApiKeyOverlay"
+	overlay.Size = UDim2.new(1, 0, 1, 0)
+	overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	overlay.BackgroundTransparency = 0.5
+	overlay.Active = true
+	overlay.Parent = screenGui
+
+	local popup = Instance.new("Frame")
+	popup.Name = "ApiKeyPopup"
+	popup.Size = UDim2.new(0, 400, 0, 200)
+	popup.Position = UDim2.new(0.5, -200, 0.5, -100)
+	popup.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+	popup.BorderSizePixel = 0
+	popup.Parent = overlay
+
+	local popupCorner = Instance.new("UICorner")
+	popupCorner.CornerRadius = UDim.new(0, 8)
+	popupCorner.Parent = popup
+
+	local title = Instance.new("TextLabel")
+	title.Name = "PopupTitle"
+	title.Size = UDim2.new(1, -20, 0, 30)
+	title.Position = UDim2.new(0, 10, 0, 10)
+	title.BackgroundTransparency = 1
+	title.Text = "OpenCode Zen — API Key"
+	title.TextColor3 = Color3.fromRGB(220, 220, 220)
+	title.Font = Enum.Font.GothamBold
+	title.TextSize = 16
+	title.Parent = popup
+
+	local desc = Instance.new("TextLabel")
+	desc.Size = UDim2.new(1, -20, 0, 40)
+	desc.Position = UDim2.new(0, 10, 0, 44)
+	desc.BackgroundTransparency = 1
+	desc.Text = "Paste your OpenCode Zen API key below.\nGet one at: https://opencode.ai/auth"
+	desc.TextColor3 = Color3.fromRGB(180, 180, 180)
+	desc.Font = Enum.Font.Gotham
+	desc.TextSize = 13
+	desc.TextYAlignment = Enum.TextYAlignment.Top
+	desc.Parent = popup
+
+	local keyBox = Instance.new("TextBox")
+	keyBox.Size = UDim2.new(1, -24, 0, 36)
+	keyBox.Position = UDim2.new(0, 12, 0, 90)
+	keyBox.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	keyBox.PlaceholderText = "sk-zen-..."
+	keyBox.TextColor3 = Color3.fromRGB(220, 220, 220)
+	keyBox.Font = Enum.Font.Gotham
+	keyBox.TextSize = 14
+	keyBox.ClearTextOnFocus = false
+	local keyBoxCorner = Instance.new("UICorner")
+	keyBoxCorner.CornerRadius = UDim.new(0, 4)
+	keyBoxCorner.Parent = keyBox
+	keyBox.Parent = popup
+
+	local confirmBtn = Instance.new("TextButton")
+	confirmBtn.Size = UDim2.new(0, 100, 0, 34)
+	confirmBtn.Position = UDim2.new(1, -110, 1, -44)
+	confirmBtn.BackgroundColor3 = Color3.fromRGB(50, 120, 200)
+	confirmBtn.Text = "Save Key"
+	confirmBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	confirmBtn.Font = Enum.Font.GothamBold
+	confirmBtn.TextSize = 14
+	local confirmCorner = Instance.new("UICorner")
+	confirmCorner.CornerRadius = UDim.new(0, 6)
+	confirmCorner.Parent = confirmBtn
+	confirmBtn.Parent = popup
+
+	local skipBtn = Instance.new("TextButton")
+	skipBtn.Size = UDim2.new(0, 80, 0, 34)
+	skipBtn.Position = UDim2.new(0, 10, 1, -44)
+	skipBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	skipBtn.Text = "Skip"
+	skipBtn.TextColor3 = Color3.fromRGB(150, 150, 150)
+	skipBtn.Font = Enum.Font.Gotham
+	skipBtn.TextSize = 14
+	local skipCorner = Instance.new("UICorner")
+	skipCorner.CornerRadius = UDim.new(0, 6)
+	skipCorner.Parent = skipBtn
+	skipBtn.Parent = popup
+
+	-- Save handler
+	confirmBtn.MouseButton1Click:Connect(function()
+		local key = keyBox.Text:gsub("%s", "")
+		if key ~= "" then
+			ZEN_API_KEY = key
+			_G.ZEN_STORED_KEY = key
+			overlay:Destroy()
+			log("API key saved. Re-testing connection...", "system")
+			task.spawn(function()
+				task.wait(0.2)
+				testConnection()
+			end)
+		else
+			keyBox.BackgroundColor3 = Color3.fromRGB(60, 30, 30)
+			task.delay(0.3, function()
+				keyBox.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+			end)
+		end
+	end)
+
+	skipBtn.MouseButton1Click:Connect(function()
+		overlay:Destroy()
+		log("No API key — API features disabled", "system")
+		setStatus("No API key — /help for commands")
+	end)
+else
+	-- Key is already set (from _G.ZEN_STORED_KEY) — test connection
+	task.spawn(function()
+		task.wait(0.5)
+		testConnection()
+	end)
 end
 
--- Initial setup
+--[[
+	INIT — final setup message
+]]
 log("OpenCode Zen Assistant GUI loaded", "success")
 log("API: " .. API_URL .. " | Model: " .. MODEL, "info")
-log("Press F2 to toggle | Type /help for commands", "info")
+log("Press F2 to toggle | Type /help for commands | /check for console", "info")
 
--- Expose these as callable tools — any agent/script can .send, .check, .run
--- This is the MCP/tool surface for the OpenCode Zen GUI
+--============================================================================
+-- EXPOSED TOOL SURFACE
+--============================================================================
+
+--[[
+	Any script can require/loadstring this module and get:
+		GUI       — the ScreenGui (toggle with .Enabled)
+		API_URL   — the endpoint string
+		Model     — the model ID
+		send      — sendToZenAPI(message, callback)
+		check     — checkConsole()
+		runScript — runScript(code, onResult)
+		env       — getEnvironment() — lists _G for the agent
+]]
+
 return {
 	GUI = screenGui,
 	API_URL = API_URL,
 	Model = MODEL,
-	-- Send a message to the AI model and get a response back
+
+	-- Send a message to the API and get a response back
 	-- @param message string — the user query
 	-- @param callback function(reply, error) — optional: fires with the AI's response text
 	send = sendToZenAPI,
 
 	-- Fetch and analyze the Roblox dev console output
-	-- Reads recent warnings/errors from the client
 	-- @return string — the console data snapshot
 	check = checkConsole,
 
