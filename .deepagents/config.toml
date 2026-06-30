@@ -1,5 +1,0 @@
-[agents]
-recent = "agent"
-
-[models]
-recent = "baseten:moonshotai/Kimi-K2.7-Code"
