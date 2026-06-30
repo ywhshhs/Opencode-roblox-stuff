@@ -1,16 +1,7 @@
 --[[
-	OpenCode Zen Assistant — Roblox Client-Sided GUI
+	OpenCode Zen Assistant - Roblox Client-Sided GUI
 	API: https://opencode.ai/zen/v1/responses
 	Model: mimo-v2.5-free
-
-	Features:
-	- Chat bar + scrollable output window
-	- OpenCode Zen API integration (mimo-v2.5-free)
-	- Console checker (/check)
-	- Script runner (/run <luau>)
-	- Auto-execute from [[EXECUTE:...]] in responses
-	- F2 toggle, draggable, fully client-sided
-	- API key popup on first load
 
 	You need an OpenCode Zen API key.
 	Get one at: https://opencode.ai/auth
@@ -19,14 +10,12 @@
 -- Services
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 
 -- Constants
 local API_URL = "https://opencode.ai/zen/v1/responses"
 local MODEL = "mimo-v2.5-free"
-local LOCAL_PLAYER = Players.LocalPlayer
 
 -- Global state (shared across sessions via _G)
 local ZEN_API_KEY = _G.ZEN_STORED_KEY or ""
@@ -107,7 +96,7 @@ minBtn.Name = "MinBtn"
 minBtn.Size = UDim2.new(0, 24, 0, 24)
 minBtn.Position = UDim2.new(1, -58, 0, 6)
 minBtn.BackgroundColor3 = Color3.fromRGB(40, 60, 40)
-minBtn.Text = "—"
+minBtn.Text = "-"
 minBtn.TextColor3 = Color3.fromRGB(100, 255, 100)
 minBtn.Font = Enum.Font.GothamBold
 minBtn.TextSize = 14
@@ -178,7 +167,7 @@ sendBtn.Name = "SendBtn"
 sendBtn.Size = UDim2.new(0, 36, 0, 36)
 sendBtn.Position = UDim2.new(1, -42, 0, 4)
 sendBtn.BackgroundColor3 = Color3.fromRGB(50, 120, 200)
-sendBtn.Text = "▶"
+sendBtn.Text = ">"
 sendBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 sendBtn.Font = Enum.Font.GothamBold
 sendBtn.TextSize = 16
@@ -294,7 +283,7 @@ local function log(message, msgType)
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.new(1, 0, 0, 20)
 	label.BackgroundTransparency = 1
-	-- Fixed: (prefix[msgType] or "[?]") .. " " .. message — message now always shows
+	-- Fixed: (prefix[msgType] or "[?]") .. " " .. message - message now always shows
 	local tag = (prefix[msgType] or "[?]")
 	label.Text = tag .. " " .. message
 	label.TextColor3 = color[msgType] or Color3.fromRGB(200, 200, 200)
@@ -347,7 +336,7 @@ end
 
 --[[
 	OpenCode Zen uses /v1/responses (OpenAI responses API), not /v1/chat/completions.
-	The responses API returns {"response": {"output": ...}} — not {"choices": [...]}.
+	The responses API returns {"response": {"output": ...}} - not {"choices": [...]}.
 
 	If the response format is different, this function parses multiple possible shapes:
 	  - responses API: data.response.output[].text
@@ -358,8 +347,8 @@ end
 
 local function sendToZenAPI(message, callback)
 	if ZEN_API_KEY == "" then
-		log("No API key set — cannot send to API", "error")
-		setStatus("No API key — set one via the popup or _G.ZEN_STORED_KEY")
+		log("No API key set - cannot send to API", "error")
+		setStatus("No API key - set one via the popup or _G.ZEN_STORED_KEY")
 		if callback then callback(nil, "no key") end
 		return
 	end
@@ -390,7 +379,7 @@ local function sendToZenAPI(message, callback)
 
 		-- Try multiple response shapes
 		if data.response and data.response.output then
-			-- responses API — output is an array of content blocks
+			-- responses API - output is an array of content blocks
 			if type(data.response.output) == "table" then
 				for _, block in ipairs(data.response.output) do
 					if block.type == "text" and type(block.text) == "string" then
@@ -409,7 +398,7 @@ local function sendToZenAPI(message, callback)
 			-- Direct content
 			reply = tostring(data.content)
 		else
-			reply = "[No response format recognized — raw: " .. tostring(response):sub(1, 200) .. "]"
+			reply = "[No response format recognized - raw: " .. tostring(response):sub(1, 200) .. "]"
 		end
 
 		if reply == "" then
@@ -419,7 +408,7 @@ local function sendToZenAPI(message, callback)
 		log(reply, "info")
 		addSeparator()
 
-		-- [[EXECUTE:...]] — runs code from the model response
+		-- [[EXECUTE:...]] - runs code from the model response
 		if reply:match("%[%[EXECUTE:(.-)%]%]") then
 			local codeToRun = reply:match("%[%[EXECUTE:(.-)%]%]")
 			log("Executing script from response...", "system")
@@ -440,7 +429,7 @@ local function sendToZenAPI(message, callback)
 		end
 	else
 		log("API request failed: " .. tostring(response), "error")
-		setStatus("Error — check connection and API key")
+		setStatus("Error - check connection and API key")
 		if callback then
 			callback(nil, response)
 		end
@@ -463,12 +452,12 @@ local function handleInput(text)
 
 	if cmd == "/help" then
 		log("Available commands:", "system")
-		log("/help — Show this help", "info")
-		log("/check — Check Roblox console", "info")
-		log("/console — Fetch full console output", "info")
-		log("/run <code> — Execute Lua code", "info")
-		log("/clear — Clear the output window", "info")
-		log("/reconnect — Re-test API connection", "info")
+		log("/help - Show this help", "info")
+		log("/check - Check Roblox console", "info")
+		log("/console - Fetch full console output", "info")
+		log("/run <code> - Execute Lua code", "info")
+		log("/clear - Clear the output window", "info")
+		log("/reconnect - Re-test API connection", "info")
 		log("Any other text will be sent to the API", "info")
 		return
 	end
@@ -561,7 +550,7 @@ local function testConnection()
 		setStatus("Connected | Model: " .. MODEL)
 	else
 		log("Connection failed: " .. tostring(response), "error")
-		setStatus("Disconnected — check URL or network")
+		setStatus("Disconnected - check URL or network")
 	end
 end
 
@@ -616,16 +605,7 @@ helpBtn.MouseButton1Click:Connect(function()
 	handleInput("/help")
 end)
 
--- Auto-connect on load
-task.spawn(function()
-	task.wait(1)
-	testConnection()
-end)
-
---============================================================================
--- KEYBOARD SHORTCUTS
---============================================================================
-
+-- Keyboard shortcuts
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then return end
 
@@ -672,7 +652,7 @@ if ZEN_API_KEY == "" then
 	title.Size = UDim2.new(1, -20, 0, 30)
 	title.Position = UDim2.new(0, 10, 0, 10)
 	title.BackgroundTransparency = 1
-	title.Text = "OpenCode Zen — API Key"
+	title.Text = "OpenCode Zen - API Key"
 	title.TextColor3 = Color3.fromRGB(220, 220, 220)
 	title.Font = Enum.Font.GothamBold
 	title.TextSize = 16
@@ -736,6 +716,7 @@ if ZEN_API_KEY == "" then
 			ZEN_API_KEY = key
 			_G.ZEN_STORED_KEY = key
 			overlay:Destroy()
+			-- Re-test the connection with the new key
 			log("API key saved. Re-testing connection...", "system")
 			task.spawn(function()
 				task.wait(0.2)
@@ -751,11 +732,11 @@ if ZEN_API_KEY == "" then
 
 	skipBtn.MouseButton1Click:Connect(function()
 		overlay:Destroy()
-		log("No API key — API features disabled", "system")
-		setStatus("No API key — /help for commands")
+		log("No API key - API features disabled", "system")
+		setStatus("No API key - /help for commands")
 	end)
 else
-	-- Key is already set (from _G.ZEN_STORED_KEY) — test connection
+	-- Key is already set (from _G.ZEN_STORED_KEY) - test connection
 	task.spawn(function()
 		task.wait(0.5)
 		testConnection()
@@ -763,7 +744,7 @@ else
 end
 
 --[[
-	INIT — final setup message
+	INIT - final setup message
 ]]
 log("OpenCode Zen Assistant GUI loaded", "success")
 log("API: " .. API_URL .. " | Model: " .. MODEL, "info")
@@ -775,13 +756,13 @@ log("Press F2 to toggle | Type /help for commands | /check for console", "info")
 
 --[[
 	Any script can require/loadstring this module and get:
-		GUI       — the ScreenGui (toggle with .Enabled)
-		API_URL   — the endpoint string
-		Model     — the model ID
-		send      — sendToZenAPI(message, callback)
-		check     — checkConsole()
-		runScript — runScript(code, onResult)
-		env       — getEnvironment() — lists _G for the agent
+		GUI       - the ScreenGui (toggle with .Enabled)
+		API_URL   - the endpoint string
+		Model     - the model ID
+		send      - sendToZenAPI(message, callback)
+		check     - checkConsole()
+		runScript - runScript(code, onResult)
+		env       - getEnvironment() - lists _G for the agent
 ]]
 
 return {
@@ -790,18 +771,17 @@ return {
 	Model = MODEL,
 
 	-- Send a message to the API and get a response back
-	-- @param message string — the user query
-	-- @param callback function(reply, error) — optional: fires with the AI's response text
+	-- @param message string - the user query
+	-- @param callback function(reply, error) - optional: fires with the AI's response text
 	send = sendToZenAPI,
 
 	-- Fetch and analyze the Roblox dev console output
-	-- @return string — the console data snapshot
+	-- @return string - the console data snapshot
 	check = checkConsole,
 
-	-- Execute arbitrary Luau code in a protected environment
-	-- @param code string — valid Luau source
-	-- @param onResult function(success, output) — optional: fires with execution result
-	-- Usage: loadstring(code)() — any Luau script
+	-- Execute arbitrary Luau code
+	-- @param code string - valid Luau source
+	-- @param onResult function(success, output) - optional: fires with execution result
 	runScript = function(code, onResult)
 		local ok, result = pcall(function()
 			return loadstring(code)()
@@ -818,7 +798,6 @@ return {
 	end,
 
 	-- Check the Luau / Roblox environment for what's available
-	-- Returns a table of available modules, functions, and globals
 	-- Useful for an AI agent to know what it can call
 	getEnvironment = function()
 		local env = {}
